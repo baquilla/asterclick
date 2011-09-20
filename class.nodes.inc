@@ -246,7 +246,7 @@ class node	{
 	function renderXML()
 		{
 		$szNL		="\n"	;
-		$szNL		=""	;
+//		$szNL		=""	;
 		$szResult	=""	;
 		$bIsRoot=empty($this->parentNode);
 		if($bIsRoot)
@@ -452,10 +452,10 @@ class node	{
 */
 	function parseXML($szString)
 			{
-			$this->xmlParser = xml_parser_create($this->$szOutput_encoding);
+			$this->xmlParser = xml_parser_create($this->szOutput_encoding);
 			xml_set_object(			$this->xmlParser,$this);
 			xml_parser_set_option (		$this->xmlParser, XML_OPTION_CASE_FOLDING	, 0 );
-			xml_parser_set_option (		$this->xmlParser, XML_OPTION_TARGET_ENCODING	, $this->$szOutput_encoding );
+			xml_parser_set_option (		$this->xmlParser, XML_OPTION_TARGET_ENCODING	, $this->szOutput_encoding );
 			xml_parser_set_option (		$this->xmlParser, XML_OPTION_SKIP_TAGSTART	, 0 );
 			xml_parser_set_option (		$this->xmlParser, XML_OPTION_SKIP_WHITE	, 0 );
 			xml_set_element_handler(	$this->xmlParser,"tagOpen","tagClosed");

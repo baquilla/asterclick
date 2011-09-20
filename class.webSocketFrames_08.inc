@@ -200,7 +200,6 @@ class	WebSocket_codec_frame_data	implements	arrayaccess, Countable, Iterator
 	public		function	__set		($name,$value	)
 			{
 
-
 			if($name==="Payload_Data_Length")
 				{
 //	print "\n__set() SETTING (Payload_Data_Length)";
@@ -378,6 +377,10 @@ if( isset(		$oParams["Payload_Data"	])		)
 			$frame			=	$oParams["websocket_frame"];
 			$oParams["Payload_Data"]=""	;$Payload_Data=&$oParams["Payload_Data"];
 
+			$oParams["websocket_frame_consumed"	]=NULL	;	//	We will compute the frame size (if possible) so that our socket buffers can be properly shifted
+			$oParams["websocket_frame_type"		]=NULL	;	//	We will compute the frame type (if possible) 
+
+
 			if(strlen($frame)<2)
 				{
 				print "\n unwrap()	UNWRAP_NEED_MORE_BYTES have(".strlen($frame).") want >2";
@@ -419,6 +422,9 @@ if( isset(		$oParams["Payload_Data"	])		)
 					}	//	End	Switch
 				}		//	End	foreach
 			print "\nReceived Payload (".$this->wframe->Payload_Data.") opcode (".$this->wframe->opcode.")";
+
+
+
 			if($this->wframe->opcode==WSF_close)
 				{
 				$oParams["unwrap_exception"]=UNWRAP_PEER_CLOSE_FRAME;
@@ -501,7 +507,7 @@ $T=new WebSocket_codec_frame_data;
 
 
 
-
+// This function is not used by anyone, so is being retired.
 function makeCodec()
 	{
 	return new WebSocket_codec_frame();
@@ -511,8 +517,16 @@ function makeCodec()
 class	WebSocket_frame
 	{
 	public	$ws_codec;
-//	public	$oParams=Array("FIN"=>1,"RSV1"=>0,"RSV2"=>0,"RSV3"=>0,"opcode"=>0,"MASK"=>0,"Payload_len"=>0,"Payload_len_extended"=>0,"Payload_Data"=>"","websocket_frame"=>"");
-	public	$oParams=Array("FIN"=>1,"RSV1"=>0,"RSV2"=>0,"RSV3"=>0,"opcode"=>0,"MASK"=>0,"Payload_len"=>0,"Payload_len_extended"=>0,"Payload_Data"=>"","websocket_frame"=>"");
+	public	$oParams=Array(	"FIN"			=>1	,
+				"RSV1"			=>0	,
+				"RSV2"			=>0	,
+				"RSV3"			=>0	,
+				"opcode"		=>0	,
+				"MASK"			=>0	,
+				"Payload_len"		=>0	,
+				"Payload_len_extended"	=>0	,
+				"Payload_Data"		=>""	,
+				"websocket_frame"	=>""	);
 
 	public	function	__toString()
 		{

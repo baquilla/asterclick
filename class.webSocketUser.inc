@@ -167,8 +167,9 @@ function	QSend($szMessage="",$opcode=WSF_text,$code=1006)
 	switch($opcode)
 		{
 	case	WSF_text	:	$oOut	=new WebSocket_frame_text(					$szMessage)	;break;
-	case	WSF_close	:	$oOut	=new WebSocket_frame_close(Array("code"=>$code,"message"=>	$szMessage))	;
-					$user->closeHandshakeByte|=User::WSF_CLOSE_SERVER					;break;
+	case	WSF_close	:	$this->Qclear();
+					$oOut	=new WebSocket_frame_close(Array("code"=>$code,"message"=>	$szMessage))	;
+					$this->closeHandshakeByte|=User::WSF_CLOSE_SERVER					;break;
 	default			:print "\nUser->QSend() unimplemented opcodce ($opcode)"					;break;
 		}
 

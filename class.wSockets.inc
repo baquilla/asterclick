@@ -169,7 +169,7 @@ pcntl_signal_dispatch();
 					continue;
 					}
 
-				print("\nbufferLen=($bufferLen) type=".gettype($bufferLen));
+//				print("\nbufferLen=($bufferLen) type=".gettype($bufferLen));
 
 			if(($user		= wSockets::getuserbysocket($socket))	===NULL		)
 				{$buffer="";	print "\n**** user object not found for socket"		;	continue;}
@@ -361,7 +361,7 @@ function send($oUserSocket,$szWebSocketFrame)
 
 
 	if($bIsResource&&$bIsUser)
-	switch(	($iWrote	=socket_send(		$oUserSocket		,
+	switch(	($iWrote	=@socket_send(		$oUserSocket		,
 							$szWebSocketFrame	,
 							$iFrameLen		,
 							0			)))
@@ -370,9 +370,11 @@ function send($oUserSocket,$szWebSocketFrame)
 		switch(	($slError=socket_last_error(	$oUserSocket	))	)
 			{
 		case	SOCKET_EAGAIN		:	print "\n".__CLASS__."::".__FUNCTION__."() socket_send() SOCKET_EAGAIN"		;	return;
-		case	SOCKET_ECONNRESET	:	print "\nSOCKET_ECONNRESET"	;
+		case	SOCKET_ECONNRESET	:	print "\n".__CLASS__."::".__FUNCTION__."() socket_send() SOCKET_ECONNRESET"	;
+			$oUser->closeHandshakeByte=User::WSF_CLOSE_DISCONNECT;
 							$this->disconnect($oUserSocket)	;	break;	//return;
-		case	SOCKET_EPIPE		:	print "\nSOCKET_EPIPE"		;
+		case	SOCKET_EPIPE		:	print "\n".__CLASS__."::".__FUNCTION__."() socket_send() SOCKET_EPIPE"		;
+
 			$oUser->closeHandshakeByte=User::WSF_CLOSE_DISCONNECT;
 			$this->disconnect($oUserSocket);
 			break;// return;
@@ -402,9 +404,10 @@ function process($user,&$socketBufferIn)
 	{
 //	$action		=$this->unwrap(Array("WebSocket_frame"=>$msg))		;	//	WebSock protocol unwrap request packet.
 	$aMsg		=Array("websocket_frame"=>&$socketBufferIn);
-printf( "\nProcess byte1=(%d) byte2=(%d) ",ord($socketBufferIn[0]),ord($socketBufferIn[1]));
-	$iConsume	=strlen($socketBufferIn);
-	print "\nprocess() ".strlen($socketBufferIn)." bytes, sending to unwrap()";
+	$iBufferConsume	=strlen($socketBufferIn);
+	$iBufferLen	=strlen($socketBufferIn);
+
+	print "\n".__CLASS__."::".__FUNCTION__."() Sending ($iBufferLen) bytes, to webSocket unwrap()";
 
 	$action		=$user->unwrap($aMsg)		;	//	WebSock protocol unwrap request packet.
 
@@ -414,78 +417,93 @@ printf( "\nProcess byte1=(%d) byte2=(%d) ",ord($socketBufferIn[0]),ord($socketBu
 			{
 		case	UNWRAP_NEED_MORE_BYTES		:print "\nprocess() UNWRAP_NEED_MORE_BYTES"	;return;//break;
 		case	UNWRAP_PEER_CLOSE_FRAME		:print "\nprocess() UNWRAP_PEER_CLOSE_FRAME"	;
-
-//			$user->wSocketState		=WebSocket_endpoint::CLOSING			;
 			$user->closeHandshakeByte	|=User::WSF_CLOSE_CLIENT			;
-			$user->Qsend("Goodbye",WSF_close,1006);
-			$socketBufferIn			=substr($socketBufferIn,$iConsume);
+			$user->Qclear();
+			$user->Qsend("1000: Normal Closure : Goodbye. AsterClick acknowledges your close request.",WSF_close,1000);
+//			$socketBufferIn			=substr($socketBufferIn,$iBufferConsume);
 			$this->disconnect($user->socket);
-			return ;
-
+//			return ;
 			}
-		return			;
+//		return			;
 		}
 
-	$socketBufferIn=substr($socketBufferIn,$iConsume);
+	//	Remove that portion of the buffer consummed by the parsed frame.
+	$socketBufferIn=substr($socketBufferIn,$iBufferConsume);
 
+	//	REQUIRE	client Payload_Data to be in the form of an XML object or FAIL the connection to close.
 	$iXMLdetect	=strpos($action,"<?")		;	//	Check for the XML lead in characters.
 	if($iXMLdetect===FALSE)					//	If the content of the submitted content
 		{						//	does not start with an "<?" we assume it is not XML, so bail.
-		print "\nNon XML message ignored (".$action.")".print_r($aMsg,TRUE);
+		print "\n".__CLASS__."::".__FUNCTION__."() Non XML message ignored (".$action.")".print_r($aMsg,TRUE);
+		$user->Qsend("1003: Unsupported Data : AsterClick encountered a Non XML Message.",WSF_close,1003);
+		$this->disconnect($user->socket);
 		return			;
 		}
-	$oNode		=new node()			;	//	Parse the XML request string into a Node object.
-	$oNode->parseXML($action)			;
+
+	if($user->wSocketState		!=WebSocket_endpoint::OPEN	)
+		{
+		print "\n".__CLASS__."::".__FUNCTION__."() User wSocketState is ({$user->wSocketState}) and no longer OPEN, XML command ('{$oNode->nodeName}') ignored.";
+		$this->disconnect($user->socket);
+		return ;
+		}
+
+	$oNodeRequest		=new node()			;	//	Parse the XML request string into a Node object.
+	$oNodeRequest->parseXML($action)			;
 
 	$szORIGIN	="HTML5_".$user->id		;	//	Create an origin string indicating the HTML5 source and user.
 
 	$aParameters	=Array("ORIGIN"=>$szORIGIN	);	//	Create the parameters array for the call to AMIaction
 
-	foreach($oNode->attributes as	$key=>$value	)	//	Fill the Parameters array with entries from 
+	foreach($oNodeRequest->attributes as	$key=>$value	)	//	Fill the Parameters array with entries from 
 			$aParameters[	$key]=$value	;	//	the request XML element's attrbites.
 
 
+print "\n".__CLASS__."::".__FUNCTION__."() XML node name ='{$oNodeRequest->nodeName}' ";
 
-	switch(strtolower($oNode->nodeName))			//	This is a hook for adding future custom processing
+
+	switch(strtolower($oNodeRequest->nodeName))			//	This is a hook for adding future custom processing
 		{						//	of request nodes by means other than Asterisk itself.
-	case	"asterclick"	:	$aParameters["AST_user"	]=$user;
-					$aParameters["AST_xml"	]=$oNode;
-					$this->ASTaction($aParameters);
-		break;
-	case	"asterplug"	:	dPrint("\nCUSTOM AsterPlug	Packet");break;
-	case	"events"	:	dPrint("\nCUSTOM AsterEvents	Packet");break;
-	case	"login"		:
-		$szUsername		=$oNode->getAttribute("username"	);
-		$szSecret		=$oNode->getAttribute("secret"		);
-		$user->bAuthenticated	= FALSE;
+	case	"asterclick"	:	$aParameters["AST_user"	]		=$user		;
+					$aParameters["AST_xml"	]		=$oNodeRequest		;
+					$this->ASTaction($aParameters		)		;		break;
+	case	"asterplug"	:	dPrint("\nCUSTOM AsterPlug	Packet"	)		;		break;
+	case	"events"	:	dPrint("\nCUSTOM AsterEvents	Packet"	)		;		break;
+	case	"login"		:	$szUsername		=$oNodeRequest->getAttribute(	"username"	)	;
+					$szSecret		=$oNodeRequest->getAttribute(	"secret"	)	;
+					$user->bAuthenticated	=			FALSE			;
 
+			if(isset(	$this->aLoginList[$szUsername]		)		&&
+					$this->aLoginList[$szUsername]["secret"]==$szSecret	)	$user->bAuthenticated	= TRUE;
 
-		if(isset($this->aLoginList[$szUsername])		)
-		if($this->aLoginList[$szUsername]["secret"]==$szSecret	)
-		$user->bAuthenticated	= TRUE;
+			$oNodeResult					=new node(Array("nodeName"	=>"Event"));$oNodeResult->setAttribute("name","login");
+			$oNodeResult->appendChild(			 new node(Array("nodeName"	=>"result",
+										"nodeValue"	=>(($user->bAuthenticated == TRUE)?"accepted":"rejected"))	));
 
-		$oNode			=new node(Array("nodeName"=>"Event"));
-		$oNode->setAttribute("name","login");
-
-		if(		$user->bAuthenticated == TRUE)		$oNode->appendChild(new node(Array("nodeName"=>"result","nodeValue"=>"accepted")));
-		else							$oNode->appendChild(new node(Array("nodeName"=>"result","nodeValue"=>"rejected")));
-
-		$user->QSend($oNode->renderXML());
-		break;
+			$user->QSend($oNodeResult->renderXML(),WSF_text)						;break;
 	case	"logoff"	:	dPrint("\nCUSTOM AsterLogoff	Packet");
 		$user->bAuthenticated = FALSE;
+
 		break;
 	case	"reload"	:	dPrint("\nCUSTOM AsterReload	Packet");break;
 	default :
-/*if(		$user->bAuthenticated = FALSE)
-		{
-		$oNode=new node(Array("nodeName"=>"Event"));
-		$oNode->setAttribute("name","login");
-		$oNode->appendChild(new node(Array("nodeName"=>"result","nodeValue"=>"required")));
-		$user->QSend($oNode->renderXML());
-		}*/
-		AMIaction($oNode->nodeName,$aParameters		);
+		if(		$user->bAuthenticated = FALSE)
+				{
+				$oNodeResult=new node(Array(	"nodeName"	=>	"Event"));
+				$oNodeResult->setAttribute(	"name"		,	"login");
+				$oNodeResult->appendChild(new node(Array("nodeName"=>"result","nodeValue"=>"required")));
+				$user->QSend($oNodeResult->renderXML());
+				
+				}else{
+
+				print "\n".__CLASS__."::".__FUNCTION__."() XML node name ='{$oNodeRequest->nodeName}'  being sent to AMIaction() with ";
+				print "[".print_r($aParameters,TRUE)."]";
+				AMIaction($oNodeRequest->nodeName,$aParameters		);
+				}
 		}// end switch
+
+print "\n".__CLASS__."::".__FUNCTION__."() /".__FUNCTION__."() XML node name ='{$oNodeRequest->nodeName}' ";
+
+
 	return;
 	}// end function process
 /*	Function	:	dohandshake()
@@ -583,16 +601,7 @@ function vectorBroadcast(	$szMessage		,
 	default					:dPrint("\nEvent broadcast for (".$oNode->getAttribute("name").")");
 //DCDCDC
 
-//print "\n".__FUNCTION__."()  just pinging";
-
-//dumpFrame($szMessage,__FUNCTION__."()");
-
-
 						foreach(wSockets::$users as $user)$user->QSend($szMessage,WSF_text);
-//						foreach(wSockets::$users as $user)$user->QSend("Hi boys and girls",WSF_text);
-
-
-
 		break;
 		}
 	}

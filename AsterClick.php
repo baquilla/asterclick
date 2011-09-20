@@ -171,9 +171,9 @@ require_once("AsterClick_signal.inc"	);	// Functions handling signal handlers
 require_once("caseEvent.php"		);	// Used to vector AMI events by name as well
 						// as some pseudo AsterClick events.
 
-$oINIagents	= new CLASSini(Array("FILE"=>"../agents.conf"));
+$oINIagents	=	new CLASSini(Array("FILE"=>"../agents.conf"));
 
-$szSavecallsin=$oINIagents->getIniValue("agents","savecallsin");
+$szSavecallsin	=	$oINIagents->getIniValue("agents","savecallsin");
 //print "\nsavecallsin=".$szSavecallsin;
 
 
@@ -205,8 +205,8 @@ function array2command($aParams=Array())
 */
 function AMImessageRemove()
 	{
-	$oSHM		= new shm();
-	$oSHM->bInUpdate=TRUE;
+	$oSHM		= new shm()	;
+	$oSHM->bInUpdate=TRUE		;
 	$aMessages	=$oSHM->aMessages;
 	if(!is_array($aMessages)	){$oSHM->aMessages=Array();return;}
 	if(count($aMessages)>0		)
@@ -221,9 +221,9 @@ function AMImessageRemove()
 	}
 
 /*	Function	:	ACMIaction()
-**	Parameters	:	$szAction
-**				$aParams	[Array()]
-**				$bStack		[TRUE	]
+**	Parameters	:	(String		)	$szAction	-
+**				(Array		)	$aParams	-	[Array()]
+**				(Boolean	)	$bStack		-	[TRUE	]
 **	Returns		:	Constructed packet to send to Asterisk
 */
 function ACMIaction($szAction,$aParams=Array(),$bStack=TRUE)
@@ -232,12 +232,10 @@ function ACMIaction($szAction,$aParams=Array(),$bStack=TRUE)
 	print "\nSAW ACMI_xxxxx\n".print_r($aParams,TRUE);
 
 	}
-
-
 /*	Function	:	AMIaction()
-**	Parameters	:	$szAction
-**				$aParams	[Array()]
-**				$bStack		[TRUE	]
+**	Parameters	:	(String		)	$szAction	-
+**				(Array		)	$aParams	-	[Array()]
+**				(Boolean	)	$bStack		-	[TRUE	]
 **	Returns		:	Constructed packet to send to Asterisk
 **	Description	:	This function builds via a call to array2command() a string with a ":" between
 **				each name and value, and and a CR+LF between each name/value pair
@@ -249,17 +247,17 @@ function ACMIaction($szAction,$aParams=Array(),$bStack=TRUE)
 */
 function AMIaction($szAction,$aParams=Array(),$bStack=TRUE)
 	{
-	global	$lStartTime	,
-		$iSequence	;
-	$oSHM		= new shm()	;
-	$szORIGIN	="SYSTEM_AMIaction";//FastAMI"	;
-//	dPrint("AMIaction origin",iCare_dPrint_AMIaction);
-	if(isset($aParams["ORIGIN"]))
+	global	$lStartTime			,
+		$iSequence			;
+	$oSHM			= new shm()	;
+	$szORIGIN		="SYSTEM_AMIaction";//FastAMI"	;
+	dPrint("AMIaction origin",iCare_dPrint_AMIaction);
+	if(isset(			$aParams["ORIGIN"]))
 		{
-		$szORIGIN=$aParams["ORIGIN"];
-		unset($aParams["ORIGIN"]);
+		$szORIGIN	=	$aParams["ORIGIN"];
+		unset(			$aParams["ORIGIN"]);
 		}
-	$szParams=(EMPTY($aParams)?"None":print_r($aParams,TRUE));
+	$szParams	=(EMPTY($aParams)?"None":print_r($aParams,TRUE));
 	dPrint("AMIaction (origin=$szORIGIN)\n action=$szAction params=".$szParams,iCare_dPrint_AMIaction);
 //	dPrint("AMIaction (origin=$szORIGIN)\n action=$szAction params=".print_r($aParams,TRUE),iCare_dPrint_AMIaction);
 
@@ -273,7 +271,7 @@ function AMIaction($szAction,$aParams=Array(),$bStack=TRUE)
 		dPrint("AMIaction bAuthenticated",iCare_dPrint_AMIaction);
 		if($szAction!="Login")
 			{
-			$aPendingLogin=$oSHM->aPendingLogin;
+			$aPendingLogin	=$oSHM->aPendingLogin;
 
 			$aPendingLogin[]=Array(	"szAction"	=>$szAction	,
 						"aParams"	=>$aParams	,
@@ -281,8 +279,8 @@ function AMIaction($szAction,$aParams=Array(),$bStack=TRUE)
 			dPrint("COMMAND PRIOR TO AUTHENTICATION ".$szAction." (".count($aPendingLogin).")" ,3);
 			$oSHM->aPendingLogin=$aPendingLogin;
 			return;
-			}
-		}
+			}	//	End	if	Not login action
+		}		//	End	if	Not authenticated.	
 
 
 	$aAction	=Array(	"ACTION"	=>$szAction,
@@ -315,14 +313,11 @@ function AMIaction($szAction,$aParams=Array(),$bStack=TRUE)
 
 	if($bStack==TRUE)
 		{
-		dPrint("AMIcommand bStack",iCare_dPrint_AMIaction);
+		dPrint("AMIcommand bStack"		,iCare_dPrint_AMIaction);
 		$aStackCommands				=$oSHM->aStackCommands	;
 		$aStackCommands[$aAction["ActionID"]]	=array2command($aAction);
 		$oSHM->aStackCommands			=$aStackCommands 	;
 		}
-
-
-
 
 	dPrint("/AMIcommand",iCare_dPrint_AMIaction);
 	$lStartTime		=mktime();
@@ -421,9 +416,9 @@ function handleAMI_CLIresponse($aResponse)
 	return;
 	}// end function
 /*	Function	:	result2array()
-**	Parameters	:	$szResultIn
-**				&$aResultOut	=Array()
-**				$bFlush		=TRUE
+**	Parameters	:	(String		)	$szResultIn	-
+**				(Array		)	&$aResultOut	-	[Array()]
+**				(Boolean	)	$bFlush		-	[TRUE]
 **	Returns		:	None
 **	Description	:	Once the AMIsocket_read() function (defined in AsterClick_socket.inc)
 **			has received enough data from Asterisk to
@@ -452,7 +447,6 @@ function result2array($szResultIn,&$aResultOut=Array(),$bFlush=TRUE)
 	$bEndOfHeaders		=	FALSE	;
 //	$bEventQueues		=	FALSE	;
 //	$szQUEUESResponse	=	""	;
-
 
 	if(strpos($aResultIn[0],"holdtime"	)!==FALSE)
 	if(strpos($aResultIn[0],"talktime"	)!==FALSE)

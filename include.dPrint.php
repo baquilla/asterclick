@@ -39,7 +39,7 @@ function	dPrint($oMessage,$iPriority=1)
 	case	iCare_dPrint_sockets			:break	;
 	case	iCare_dPrint_socketsAMI			:return	;
 	case	iCare_dPrint_parse			:return	;//break;
-	case	iCare_dPrint_AMIaction			:return	;//return;
+	case	iCare_dPrint_AMIaction			:break	;//return;
 	case	iCare_dPrint_AMIevent			:return	;//return;
 	case	iCare_dPrint_SYSTEMevent		:return	;//return;
 	case	iCare_dPrint_webSockets			:break	;//return;

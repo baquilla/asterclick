@@ -58,12 +58,8 @@ function AMIsocket_read()
 			dPrint("AMIsocket_read(FALSE)",iCare_dPrint_socketsAMI);
 			break;
 			}
-
-
-		}// while socket selects readable
-
+		}	//	End	while	socket selects readable
 //	$szBufferIn=trim($szBufferIn);
-
 	$iMaxLoop=20;
 	while(!empty($szBufferIn)&&($iMaxLoop--)>0)//return;
 		{
@@ -79,7 +75,8 @@ function AMIsocket_read()
 	if($bHit===TRUE)
 	dPrint("/AMIsocket_read()",iCare_dPrint_socketsAMI);
 
-	}// /readAMIsocket()
+	}	//	End	Function	readAMIsocket()
+
 /*	Function	:	AMIsocket_write()
 **	Parameters	:	None
 **	Returns		:	None
@@ -115,8 +112,6 @@ function AMIsocket_write()
 		break;
 		}// while
 	}// End Function;
-
-
 
 /*	Function	:	AMIsocket_check()
 **	Parameters	:	None
@@ -160,9 +155,9 @@ function AMIsocket_check()
 		break;
 		}// while
 	}// End Function
-/*	Function	:
-**	Parameters	:
-**	Returns		:
+/*	Function	:	AMIsocket_create()
+**	Parameters	:	None
+**	Returns		:	None
 **	Description	:
 */
 function AMIsocket_create()
