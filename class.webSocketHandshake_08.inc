@@ -14,7 +14,12 @@ require_once("include.dPrint.php");
 
 class	WebSocketHandshake_08
 	{
-	private	$szHandshakeResult	="";
+	private $aSec_WebSocket_Versions	= Array(
+0	=>FALSE	,1	=>FALSE	,2	=>FALSE	,3	=>FALSE	,4	=>FALSE	,5	=>FALSE	,
+6	=>FALSE	,7	=>TRUE	,8	=>TRUE	,9	=>FALSE	,10	=>FALSE	,11	=>FALSE	,
+12	=>FALSE	,13	=>FALSE	,14	=>FALSE	,15	=>FALSE	);
+	private	$szHandshakeResult		=""	;
+	public $iResultCode			=500	;	//	Sever Error (Simply because if I don't set it , it would be )
 /*	Function	:	__construct()
 **	Parameters	:	$szBuffer
 **	Returns		:	None
@@ -28,6 +33,24 @@ class	WebSocketHandshake_08
 
 		}
 
+public	function	checkVersion($szSec_WebSocket_Version)
+	{
+	if(array_key_exists(			$szSec_WebSocket_Version,	$this->aSec_WebSocket_Versions)		)
+	if($this->aSec_WebSocket_Versions[	$szSec_WebSocket_Version]===TRUE	)return TRUE;
+
+
+
+
+	$szSec_WebSocket_Versions_supperted=implode(',',$this->aSec_WebSocket_Versions);
+
+$this->iResultCode		=400	;
+$this->szHandshakeResult	=<<<EOL
+HTTP/1.1 400 Bad Request
+Sec-WebSocket-Version: $szSec_WebSocket_Versions_supperted
+EOL;
+	return FALSE;
+	}
+
 /**
 GET /chat HTTP/1.1
 Host: server.example.com
@@ -40,15 +63,18 @@ Sec-WebSocket-Version: 8
 **/
 public function doHandshake(&$szBuffer)
 		{
-		dPrint("\nWebSocket Handshake Request\n".$szBuffer,iCare_dPrint_webSockets_handshake);
+		dPrint("\n*** wSocket PROTOCOL Handshake Request\n".$szBuffer,iCare_dPrint_webSockets_handshake);
 
-	        $szResource		= $szHost			= $szUpgrade			= $szConnection	=
-		$szSec_WebSocket_Key	= $szSec_WebSocket_Origin	= $szSec_WebSocket_Protocol	= $szSec_WebSocket_Version="";
+	        $szResource		= $szHost			= $szUpgrade			= $szConnection			=
+		$szSec_WebSocket_Key	= $szSec_WebSocket_Origin	= $szSec_WebSocket_Protocol	= $szSec_WebSocket_Version	="";
 
-$head_size=strpos($szBuffer,"\r\n\r\n"			)	;
-$head_size=($head_size===FALSE)?-666:($head_size+4	)	;
-printf( "\n".'in handshake headsize=(%d) buffersize=(%d) ',$head_size,strlen($szBuffer));
+		$head_size		=strpos($szBuffer,"\r\n\r\n"			)	;
+		$head_size		=($head_size===FALSE)?-666:($head_size+4	)	;
 
+
+//		dPrint("\n*** wSocket PROTOCOL Handshake Request\n".$szBuffer,iCare_dPrint_webSockets_handshake);
+
+		dPrint(sprintf( "\n*** ".'PROTOCOL Handshake headsize=(%d) buffersize=(%d) ',$head_size,strlen($szBuffer)),iCare_dPrint_webSockets_handshake);
 
 		preg_match('#GET (.*?) HTTP#'			, $szBuffer, $match) && $szResource			= $match[1];
 		preg_match("#Host: ([^\r\n]+)#"			, $szBuffer, $match) && $szHost				= $match[1];
@@ -64,7 +90,21 @@ printf( "\n".'in handshake headsize=(%d) buffersize=(%d) ',$head_size,strlen($sz
 
 	        preg_match("#Sec_WebSocket_Origin: (.*?)\r\n#"	, $szBuffer, $match) && $szSec_WebSocket_Origin		= $match[1];
 	        preg_match("#Sec_WebSocket_Protocol: (.*?)\r\n#", $szBuffer, $match) && $szSec_WebSocket_Protocol	= $match[1];
-	        preg_match("#Sec_WebSocket_Version: (.*?)\$#"	, $szBuffer, $match) && $szSec_WebSocket_Versoin	= $match[1];
+	        preg_match("#Sec-WebSocket-Version: (.*?)\r\n#"	, $szBuffer, $match) && $szSec_WebSocket_Version	= $match[1];
+
+		dPrint("\nWebSocket Version requested\n".$szSec_WebSocket_Version,iCare_dPrint_webSockets_handshake);
+
+
+		if(!$this->checkVersion($szSec_WebSocket_Version))
+			{
+		dPrint("\nWebSocket Version REJECTED\n".$szSec_WebSocket_Version,iCare_dPrint_webSockets_handshake);
+			return $this->szHandshakeResult;
+			}else{
+		dPrint("\nWebSocket Version ACCEPTED\n".$szSec_WebSocket_Version,iCare_dPrint_webSockets_handshake);
+			}
+
+
+
 
 		// This GUID is specifically related to version 08 of the webSocketthe 08 
 		$GUID			= "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -88,7 +128,7 @@ printf( "\n".'in handshake headsize=(%d) buffersize=(%d) ',$head_size,strlen($sz
 */
 
 // Invalid UTF-8 sequence in header value
-
+$this->iResultCode =101;
 		$this->szHandshakeResult =	"HTTP/1.1 101 Switching Protocols\r\n"				.
 						"Upgrade: WebSocket\r\n"					.
 						"Connection: Upgrade\r\n"					.
@@ -100,10 +140,9 @@ printf( "\n".'in handshake headsize=(%d) buffersize=(%d) ',$head_size,strlen($sz
 		dPrint( "\nWebSocket Handshake_08 RESPONSE\n".$this->szHandshakeResult,iCare_dPrint_webSockets_handshake);
 
 //dumpframe($this->szHandshakeResult);
-
 $szBuffer=substr($szBuffer,$head_size);
 
-
+		$this->iResultCode=101;
 		return $this->szHandshakeResult;
 
 		}// end function __construct()

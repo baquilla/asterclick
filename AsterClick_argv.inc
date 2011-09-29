@@ -32,7 +32,7 @@ function AsterClick_argv_main($szArgv)
 */
 function AsterClick_argv_stop()
 	{
-	dPrint("end server",iCare_dPrint_always);
+	dPrint("*** ArsterClick	END	SERVER",iCare_dPrint_always);
 	$oPid= new pid();
 	$oPid->delPIDfilename();
 	$oSHM= new shm();

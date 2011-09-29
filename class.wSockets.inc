@@ -26,8 +26,14 @@ require_once("class.webSocketFrames_08.inc"	);	//	The message framing protocol
 require_once("class.webSocketUser.inc"		);	//	User class for each connected socket.
 require_once("class.msg_queues.inc"		);	//	Class for working with System V message ques.
 require_once("class.nodes.inc"			);	//	XML Node creation / manipulation.
+require_once("class.circularBuffer.inc"		);	//	A circular Ring buffer class.
+
+
 require_once("AsterClick_signal.inc"		);	//	Signal Handling
 require_once("include.socket.defines.php"	);	//	Standard socket constants
+
+
+
 
 		AsterClick_signal_handler_setup();
 
@@ -41,14 +47,14 @@ require_once("include.socket.defines.php"	);	//	Standard socket constants
 */
 class wSockets
 	{
-var	$master	=	NULL			;	//	The orignal server socket. Each time this master
+var	$master		=	NULL		;	//	The orignal server socket. Each time this master
 						 	//	socket shows up as readable in a socket select,
 							//	we socket_accept() a new incoming socket connection.
 
-var	$debug	=	FALSE			;	//	Used to enable/disable the console() display method.
+var	$debug		=	FALSE		;	//	Used to enable/disable the console() display method.
 
 static	$sockets	=	Array()		;	//	Array of all sockets accept()'ed from $master
-static	$users		=	Array()		;	//	Array of user Objects.
+//static	$users		=	Array()		;	//	Array of user Objects.
 static	$buffers	=	Array()		;	//	Array of socket io buffers array(array($read,$write),...) 
 							//	$buffers[$socket][0=read buffer | 1=write buffer]
 static	$socketsHospice	=	Array()		;	//	WebSockets in the CLOSING state are placed in
@@ -75,7 +81,7 @@ function wSockets()
 	global			$szWebSocketHost,	$iWebSocketPort		;	//	Host and port to run the webSockets as.
 	$this->wSockets_start(	$szWebSocketHost,	$iWebSocketPort)	;	//	These can be adjusted on AsterClickServer.conf
 
-	if($oSHM->bWebSocketLoop==0)return dPrint(	"\nWebSockets Loop Ends\n",iCare_dPrint_always);
+	if($oSHM->bWebSocketLoop==0)return dPrint(	"\n***wSocket LOOP	Loop Ends\n",iCare_dPrint_always);
 
 
 	foreach($this->sockets as $key =>$value)	socket_set_nonblock($value);
@@ -85,15 +91,15 @@ function wSockets()
 **	Main webSockets loop		**
 **					**
 *****************************************/
-	dPrint(		"WebSockets Loop Begins\n",iCare_dPrint_always);
+	dPrint(		"*** wSocket	LOOP	BEGINS",iCare_dPrint_always);
 
 try	{
 
 	while($oSHM->bWebSocketLoop	==1)
 		{
-pcntl_signal_dispatch();
+		pcntl_signal_dispatch();
 		$SKread		=$this->sockets			;//	Check all sockets for read
-		$SKwrite	=$this->getsocketsbypending()	;//	Find users socket with pending messages
+		$SKwrite	=User::getsocketsbypending()	;//	Find users socket with pending messages
 		$SKexcept	=NULL				;//	If there is something amis it will
 								 //	be stored here.
 
@@ -116,8 +122,6 @@ pcntl_signal_dispatch();
 {
 
 }else{
-
-
 		if(FALSE===socket_select(	$SKread			,//	If there are no sockets in need of service, loop.
 						$SKwrite		,
 						$SKexcept		,
@@ -128,62 +132,63 @@ pcntl_signal_dispatch();
 **	Process Socket Exceptions.	*
 ****************************************/
 		if(			$SKexcept	!=	NULL		)
-		foreach(		$SKexcept	as	$socket		)dPrint("\n*** wSockets socket_select() exception ",iCare_dPrint_always)	;
+		foreach(		$SKexcept	as	$socket		)
+			{
+			dPrint("\n*** wSockets socket_select() exception ",iCare_dPrint_always)	;
+			}
+
 /****************************************
 **	Process Sockets needing reading	*
 ****************************************/
 		foreach(		$SKread		as	$socket		)
 			{
-			if(		$socket		==	$this->master	)			//	If this is the server socket
+			if(		$socket		==	$this->master	)	//	If this is the server socket, it's readability
+				{$this->connect(	$socket);continue;	};	//	indicates there is a new connection to Accept.
+
+			usleep(1000);							//	Allow other processes breathing room.
+
+			if((		$bufferLen	=@socket_recv(		$socket,$buffer,2048,0	))===FALSE)
 				{
-				print "\nAccept"				;
-				if(($socket		=	socket_accept($this->master))===FALSE	)	continue;
-				if(!is_resource(		$socket)				)
+				switch((	$slError	= socket_last_error(	$socket			)))
 					{
-					print "\nAccept->is_resource FALSE"	;
-					continue				;
-					}
-				print "\nAccept->connect";
-				$this->connect(			$socket)	;
+				case	SOCKET_EAGAIN		:	dPrint("\n*** wSockets socket_recv->switch->SOCKET_SOCKET_EAGAIN"	,iCare_dPrint_sockets)	;continue;
+				case	SOCKET_ECONNRESET	:	dPrint("\n*** wSockets socket_recv->switch->SOCKET_ECONNRESET"		,iCare_dPrint_sockets)	;
+									$this->disconnect($socket)						;continue;
+				default				:	dPrint("\n*** wSockets socket_recv->switch->default=($slError)"		,iCare_dPrint_sockets)	;
+									throw new SocketException("socket_recv",$socket)			;continue;
+					};	//	End	Switch
+				}
 
-				};//	Grab a socket from it.
+			if($bufferLen		==0					)
+				{
+//				print("\nBUFFER_LEN == 0 , perhaps it is closed");
+				continue;
+				}
 
-			usleep(1000);								//	Allow other processes breathing room.
-//				if((		$bufferLen	=@socket_recv(		$socket,$buffer,2048,0	))==FALSE)
-				if((		$bufferLen	=@socket_recv(		$socket,$buffer,2048,0	))===FALSE)
-					{
-					switch((	$slError	= socket_last_error(	$socket			)))
-						{
-					case	SOCKET_EAGAIN		:	print "\nSOCKET_EAGAIN"		;	continue;
-					case	SOCKET_ECONNRESET	:	print "\nSOCKET_ECONNRESET"	;
-										$this->disconnect($socket)	;	continue;
-					default				:
-						print("\nsocket_recv->switch->default=($slError)");
-
-						throw new SocketException("socket_recv",$socket);			continue;
-						};	//	End	Switch
-					}
-				if($bufferLen		==0					)
-					{
-//					print("\nBUFFER_LEN == 0 , perhaps it is closed");
-					continue;
-					}
-
-//				print("\nbufferLen=($bufferLen) type=".gettype($bufferLen));
-
-			if(($user		= wSockets::getuserbysocket($socket))	===NULL		)
-				{$buffer="";	print "\n**** user object not found for socket"		;	continue;}
+			if(($user		= User::getuserbysocket($socket))	===NULL		)
+				{
+				dPrint("\n*** wSockets SKreading User::getuserbysocket() returned NULL disconnecting",iCare_dPrint_sockets)	;
+				$this->disconnect();
+				continue;
+				}
 
 			if(preg_match('#^GET (.*?) HTTP#',$buffer,$match)===1)
 				{
-				$user->Qclear()						;	//	Clear the user's pending message queue
-				$user->handshake	=false				;	//	Indicate the user needs to handshake
-				$user->classHandshake	=new WebSocketHandshake_08()	;	//	Assign a WebSocket handshake class instance
-				$user->classFraming	=new WebSocket_codec_frame()	;	//	Assign a WebSocket message framing instance.
-				$this->dohandshake(	$user,$buffer)			;	//	Initiate a handshake.
-			//	$buffer=""						;
-				continue						;
+				if($user->dohandshake(	$buffer)===FALSE)
+					{
+					dPrint(	"\n*** wSocket	PROTOCOL	HANDSHAKE	FAILS disconnecting"	,iCare_dPrint_sockets)	;
+					$this->disconnect($socket);
+					}	//	Initiate a handshake.
+				dPrint(		"\n*** wSocket	PROTOCOL	OPEN"					,iCare_dPrint_sockets)	;
+				continue;
 				}
+
+			if($user->wSocketState!==WebSocket_endpoint::OPEN)
+				{
+				dPrint(		"\n*** wSocket	PROTOCOL	(warning)	webSocket State (".$user->wSocketState.")",iCare_dPrint_sockets)	;
+				}
+
+
 			$this->process(			$user,$buffer);
 			continue;
 			}// foreach
@@ -194,9 +199,9 @@ pcntl_signal_dispatch();
 		if(	$SKwrite==NULL		)continue;
 		foreach($SKwrite as $socket	)
 			{
-			if($socket			==	$this->master	)continue;
-			$oUser				=	wSockets::getuserbysocket(	$socket)			;
-			if(		!$oUser->Qempty()					)$this->send(	$socket,$oUser->Qshift())	;
+			if($socket							==	$this->master	)continue;
+			if(($oUser	=	User::getuserbysocket(	$socket))	==NULL			){$this->disconnect($socket);continue;}	;
+			if(		!$oUser->Qempty()							){$this->send(	$socket,$oUser->Qshift())	;	}
 			else print "\nWritable socket with nothing to write";
 			}
 /************************************************
@@ -211,15 +216,17 @@ pcntl_signal_dispatch();
 
 	foreach($this->sockets as $k=>$v)$this->disconnect($v);
 
+	dPrint(	sprintf	(	"\n*** wSocket	LOOP	ENDS")	,iCare_dPrint_sockets)	;	//	Announce disconnect of socket
 
-	$this->console("\n**** WebSockets Loop ENDS\n",0	);
-	$this->console("End Loop wSockets\n"			);
+//	$this->console("\n**** WebSockets Loop ENDS\n",0	);
 	}// end function wSockets constructor 
 
 /*	Function	:	checkHospice()
 **	Parameters	:	None
 **	Returns		:	None
-**	Description	:
+**	Description	:	When a WebSocket connection enters the process of the closing handshake
+**				it is placed in a hospice collection that is checked and processed periodically
+**				to achieve an orderly shutdown of that connection.
 */
 function checkHospice()
 	{
@@ -227,55 +234,51 @@ function checkHospice()
 	$iLimit=3;
 	foreach(wSockets::$socketsHospice as $k=>$v)
 		{
-		if(	!is_resource($v)	)	{$this->array_remove_object(wSockets::$socketsHospice ,$v);continue;}
+		if(	!is_resource($v)	)	{array_remove_object(wSockets::$socketsHospice ,$v);continue;}
 		else					{$this->disconnect($v);}
 		if(--$iLimit<0		)break;
 		}
 	array_push(wSockets::$socketsHospice,array_shift(wSockets::$socketsHospice));//print_r($a);
 	usleep(1000);								//	Allow other processes breathing room.
 	}
+
 /*	Function	:	connect()
 **	Parameters	:	(Socket		)	$socket
-**	Returns		:	None
+**	Returns		:	(Boolean	)	TRUE	=	Success
+**							FAKSE	=	Error
 **	Description	:	This bit creates a new entry in the user and socket
 **			member arrays. the user is assigned an unique ID and the
 **			socket is set to non-blocking.
 **	NOTE		:	This does not perform the WebSocket handshake, but rather
-**			just performs the bookkeeping for tracking the TCP socket and 
-**			creating a new user object.
+**			just performs accept for the new connection and the bookkeeping for tracking the TCP
+**			socket and creating a new user object.
 **
 **			During the next read cycle for this socket, the handshaking should occur.
 */
 function connect($socket)
 	{
-	if(!is_resource(		$socket))return	;	//	If $socket is not a socket type resource bail.
-	$user				=	new User(Array("id"=>uniqid(),"socket"=>$socket));
-	$user->id			=	uniqid()	;	//	An unique id created when the user makes their TCP/IP socket connection
-	$user->socket			=	$socket		;	//	The socket the user is connected on.
-	socket_set_nonblock(		$socket)		;	//	Tends to be much faster.
-	array_push(wSockets::$users	,$user			);	//	Add new user to list.
-	array_push($this->sockets	,$socket		);	//	Add new socket to list.
-	wSockets::$buffers[$socket]	=	Array("",""	);	//	Add new I/O buffer set to list. (0=read buffer / 1=write buffer)
+	dPrint(			"\n*** wSocket	socket_accept() "		,iCare_dPrint_sockets)	;
+	if(($socket		=	socket_accept($this->master))===FALSE	)				return	FALSE	;
+	if(!is_resource(		$socket)				)
+		{	dPrint(	"\n*** wSocket	socket_accept(BAD SOCKET) "	,iCare_dPrint_sockets)	;	return	FALSE ;
+		}else	dPrint(	"\n*** wSocket	socket_accept(OK) "		,iCare_dPrint_sockets)	;
 
-	$this->console($socket." CONNECTED!"			);	//	Announce th connection
+
+	$user				=	new User(Array("id"=>uniqid(),"socket"=>$socket));
+
+	socket_set_nonblock(			$socket				);	//	Tends to be much faster.
+	array_push($this->sockets	,	$socket				);	//	Add new socket to list.
+	wSockets::$buffers[			$socket]	=Array("",""	);	//	Add new I/O buffer set to list. (0=read buffer / 1=write buffer)
+
+	dPrint(			"\n*** wSocket	SOCKET		CONNECTED"	,iCare_dPrint_sockets)	;
+	dPrint(			"\n*** wSocket	PROTOCOL	CONNECTING"	,iCare_dPrint_sockets)	;
 	}// end function connect
-/*	Function	:	array_remove_object()
-**	Parameters	:	(Array		)		&$aArray
-**				(Object		)		&$oObject
-**	Returns		:	None
-**	Description	:	Removes the oObject from the array if present.
-**
-*/
-function array_remove_object(&$aArray,&$oObject)
-	{
-	if(!is_null($oObject)&&($indexObject	= array_search(		$oObject,	$aArray	))	>=0	)
-		array_splice(	$aArray,$indexObject,1);
-	}
+
 /*	Function	:	disconnect()
 **	Parameters	:	(Socket		)		$socket
 **	Returns		:	None
 **	Description	:	Disconnects a HTML5 socket client and removes
-**			the related entry from the wSockets::$users array and .
+**			the related entry from the User::$users array and .
 */
 function disconnect($socket)
 	{
@@ -283,22 +286,33 @@ function disconnect($socket)
 	if(is_resource($socket))wSockets::$socketsHospice[]=$socket	;
 
 	//	MAME,KILL,DESTROY!!!!
-	//	If there is no user orthe user's websocket state is CLOSE destroy session 
-	if(is_null($user=wSockets::getuserbysocket(	$socket))||$user->wSocketState==WebSocket_endpoint::CLOSED)
+	//	If there is no user or the user's websocket state is CLOSE destroy session 
+	if(is_null($user=User::getuserbysocket(	$socket))||$user->wSocketState==WebSocket_endpoint::CLOSED)
 		{
 		if($user!==NULL)
-		$this->array_remove_object(	wSockets::$users		,$user			);	//	remove user from array.
-		$this->array_remove_object(	wSockets::$buffers		,$socket		);	//	remove socket buffers for ($socket).
-		$this->array_remove_object(	wSockets::$socketsHospice	,$socket		);	//	remove socket Hodpice for ($socket).
+		array_remove_object(	User::$users			,$user			);	//	remove user from array.
+		array_remove_object(	wSockets::$buffers		,$socket		);	//	remove socket buffers for ($socket).
+		array_remove_object(	wSockets::$socketsHospice	,$socket		);	//	remove socket Hodpice for ($socket).
 
 		if(is_resource($socket))
 			{
+			if(@socket_shutdown(	$socket, 1	))	// Sutdown writing	Remote host yet can read
+				{
+				usleep(			500		);//wait remote host
+				@socket_shutdown(	$socket, 0	);//close reading
+				}
 			socket_set_block(					$socket			);	//	Set blocking on so that buffers are flushed and such.
 			socket_close(						$socket			);	//	Close the socket
 			}
 
-		$this->console(							$socket." DISCONNECTED!");	//	Announce disconnect of socket
-		$this->array_remove_object(	$this->sockets			,$socket		);	//	Remove socket from socket array
+
+		dPrint(	sprintf	(	"\n*** wSocket	DISCONNECTED socket(%s)",$socket)	,iCare_dPrint_sockets)	;	//	Announce disconnect of socket
+
+//		$this->console(							$socket." DISCONNECTED!");
+
+
+
+		array_remove_object(	$this->sockets			,$socket		);	//	Remove socket from socket array
 		return	;	//	He's dead Jim....	If it's James T Kirk , why does the tombstome read "J.R.K."  ?
 		}		//	Anyways , the socket and related references have been properly disposed of.
 
@@ -307,31 +321,29 @@ function disconnect($socket)
 		$now	=	mktime();
 
 		//	If the timeout start marker is not set , set it to the current time.
-		if($user->closeHandshakeStarted	==0				)$user->closeHandshakeStarted	=$now			;
+		if($user->closeHandshakeStarted		==0				)$user->closeHandshakeStarted	=$now			;
 
 		//	If we are still showing an OPEN state , switch to a CLOSING state.
-		if($user->wSocketState		==WebSocket_endpoint::OPEN	)$user->wSocketState		=WebSocket_endpoint::CLOSING	;
+		if($user->wSocketState			==WebSocket_endpoint::OPEN	)$user->wSocketState		=WebSocket_endpoint::CLOSING	;
 
 		//	If timeout for closing handshake has expired , proceed to closed state.
-		if($now - $user->closeHandshakeStarted >30)
+		if($now - $user->closeHandshakeStarted	>30				)
 			{
-			$user->wSocketState		=WebSocket_endpoint::CLOSED	;
-			print "\n".__CLASS__."::".__FUNCTION__."() AsterClick CLOSING timeout DISCONNECT.";
-			return;
+			$user->wSocketState		=WebSocket_endpoint::CLOSED				;
+			dPrint("\n*** wSockets	PROTOCOL	TIMEOUT	CLOSING",iCare_dPrint_sockets)		;	return		;
 			}
 		//	If both parties have transacted close frames , proceed to closed state
-		if($user->closeHandshakeByte==User::WSF_CLOSE_DISCONNECT)
+		if($user->closeHandshakeByte		==User::WSF_CLOSE_DISCONNECT	)
 			{
-			$user->wSocketState		=WebSocket_endpoint::CLOSED	;
-			print "\n".__CLASS__."::".__FUNCTION__."() AsterClick DISCONNECT.";
-			return;
+			$user->wSocketState		=WebSocket_endpoint::CLOSED				;
+			dPrint("\n*** wSockets	PROTOCOL	CLOSED",iCare_dPrint_sockets)			;	return		;
 			}
 		//	If we have not sent a close frame.
-		if(!$user->closeHandshakeByte&User::WSF_CLOSE_SERVER)
+		if(!$user->closeHandshakeByte&User::WSF_CLOSE_SERVER			)
 			{
-			print "\n".__CLASS__."::".__FUNCTION__."() AsterClick sending CLOSE frame.";
-			$user->Qsend("AsterClick Closing Socket",WSF_close,1066)	;
-			$user->closeHandshakeByte|=WSF_CLOSE_SERVER			;
+			dPrint("\n*** wSockets	PROTOCOL	CLOSING frame sent",iCare_dPrint_sockets)	;
+			$user->Qsend("AsterClick Closing Socket",WSF_close,1066)				;
+			$user->closeHandshakeByte|=WSF_CLOSE_SERVER						;	return		;
 			}
 
 	}	//	End	Function	disconnect()
@@ -346,7 +358,7 @@ function send($oUserSocket,$szWebSocketFrame)
 	{
 	$iFrameLen	=	strlen				($szWebSocketFrame	);
 	$bIsResource	=	is_resource			($oUserSocket		);
-	$oUser		=	wSockets::getuserbysocket	($oUserSocket		);
+	$oUser		=	User::getuserbysocket	($oUserSocket		);
 	$bIsUser	=	!is_null			($oUser			);
 	$iWrote		=0;
 
@@ -354,7 +366,6 @@ function send($oUserSocket,$szWebSocketFrame)
 //		$iFrameLen											,
 //		(($bIsResource	)?"Yes":"No")									,
 //		(($bIsUser	)?"Yes":"No")									);
-
 //return;			//	129	130
 //$szWebSocketFrame=chr(129).chr(2)."hi";
 //dumpFrame($szWebSocketFrame);
@@ -369,28 +380,26 @@ function send($oUserSocket,$szWebSocketFrame)
 	case	FALSE:
 		switch(	($slError=socket_last_error(	$oUserSocket	))	)
 			{
-		case	SOCKET_EAGAIN		:	print "\n".__CLASS__."::".__FUNCTION__."() socket_send() SOCKET_EAGAIN"		;	return;
-		case	SOCKET_ECONNRESET	:	print "\n".__CLASS__."::".__FUNCTION__."() socket_send() SOCKET_ECONNRESET"	;
-			$oUser->closeHandshakeByte=User::WSF_CLOSE_DISCONNECT;
-							$this->disconnect($oUserSocket)	;	break;	//return;
-		case	SOCKET_EPIPE		:	print "\n".__CLASS__."::".__FUNCTION__."() socket_send() SOCKET_EPIPE"		;
-
-			$oUser->closeHandshakeByte=User::WSF_CLOSE_DISCONNECT;
-			$this->disconnect($oUserSocket);
-			break;// return;
-		default				:
-			print	"\nsend()->socket_send->switch->default=($slError)"	;
-			throw new SocketException("socket_send",$oUserSocket)		;		
-			return								;
+		case	SOCKET_EAGAIN		:	dPrint(	sprintf	("\n*** wSocket socket_send() SOCKET_EAGAIN"	),iCare_dPrint_sockets)	;return	;
+		case	SOCKET_ECONNRESET	:	dPrint(	sprintf	("\n*** wSocket socket_send() SOCKET_ECONNRESET"),iCare_dPrint_sockets)	;
+							$oUser->closeHandshakeByte=User::WSF_CLOSE_DISCONNECT					;
+							$this->disconnect($oUserSocket)								;break	;
+		case	SOCKET_EPIPE		:	dPrint(	sprintf	("\n*** wSocket socket_send() SOCKET_EPIPE"	),iCare_dPrint_sockets)	;
+							$oUser->closeHandshakeByte=User::WSF_CLOSE_DISCONNECT					;
+							$this->disconnect($oUserSocket)								;break	;
+		default				:	dPrint(	sprintf	("\n*** wSocket socket_send() error(%d : %s)"	,
+									$slError,socket_strerror($slError)		),iCare_dPrint_sockets)	;
+							throw new SocketException("socket_send",$oUserSocket)					;return	;
 			}	//	End	Switch
 		$iWrote=0;
 		}		//	End	Switch
 
-	printf	("\n".'Wrote (%d) bytes of (%d) bytes of data.  valid socket/user resource (%s)/(%s)'."\n"	,
+
+	dPrint(	sprintf	("\n*** wSocket		".'socket_write(%d of %d sent). %s %s'."\n"		,
 		$iWrote												,
 		$iFrameLen											,
-		(($bIsResource	)?"Yes":"No")									,
-		(($bIsUser	)?"Yes":"No")									);
+		(($bIsResource	)?""	:"NO socket"	)						,
+		(($bIsUser	)?""	:"NO user"	)						)	,iCare_dPrint_sockets)	;
 	} // end function send
 /*	Function	:	process()
 **	Parameters	:	(User		)	$user		- Instance of User class
@@ -403,11 +412,15 @@ function send($oUserSocket,$szWebSocketFrame)
 function process($user,&$socketBufferIn)
 	{
 //	$action		=$this->unwrap(Array("WebSocket_frame"=>$msg))		;	//	WebSock protocol unwrap request packet.
+
+
+
 	$aMsg		=Array("websocket_frame"=>&$socketBufferIn);
 	$iBufferConsume	=strlen($socketBufferIn);
 	$iBufferLen	=strlen($socketBufferIn);
 
-	print "\n".__CLASS__."::".__FUNCTION__."() Sending ($iBufferLen) bytes, to webSocket unwrap()";
+	dPrint(	sprintf	(			"*** wSocket PROTOCOL	UNWRAP(%d) bytes"	,
+						$iBufferLen						)	,iCare_dPrint_sockets)	;
 
 	$action		=$user->unwrap($aMsg)		;	//	WebSock protocol unwrap request packet.
 
@@ -415,8 +428,11 @@ function process($user,&$socketBufferIn)
 		{
 		switch($aMsg["unwrap_exception"])
 			{
-		case	UNWRAP_NEED_MORE_BYTES		:print "\nprocess() UNWRAP_NEED_MORE_BYTES"	;return;//break;
-		case	UNWRAP_PEER_CLOSE_FRAME		:print "\nprocess() UNWRAP_PEER_CLOSE_FRAME"	;
+		case	UNWRAP_NEED_MORE_BYTES		:
+			dPrint(	sprintf	(	"*** wSocket PROTOCOL	UNWRAP(UNWRAP_NEED_MORE_BYTES)"	)	,iCare_dPrint_sockets)	;
+			return;//break;
+		case	UNWRAP_PEER_CLOSE_FRAME		:
+			dPrint(	sprintf	(	"*** wSocket PROTOCOL	UNWRAP(UNWRAP_PEER_CLOSE_FRAME)"	)	,iCare_dPrint_sockets)	;
 			$user->closeHandshakeByte	|=User::WSF_CLOSE_CLIENT			;
 			$user->Qclear();
 			$user->Qsend("1000: Normal Closure : Goodbye. AsterClick acknowledges your close request.",WSF_close,1000);
@@ -450,16 +466,14 @@ function process($user,&$socketBufferIn)
 	$oNodeRequest		=new node()			;	//	Parse the XML request string into a Node object.
 	$oNodeRequest->parseXML($action)			;
 
-	$szORIGIN	="HTML5_".$user->id		;	//	Create an origin string indicating the HTML5 source and user.
+	$szORIGIN		="HTML5_".$user->id		;	//	Create an origin string indicating the HTML5 source and user.
 
-	$aParameters	=Array("ORIGIN"=>$szORIGIN	);	//	Create the parameters array for the call to AMIaction
+	$aParameters		=Array("ORIGIN"=>$szORIGIN	);	//	Create the parameters array for the call to AMIaction
 
 	foreach($oNodeRequest->attributes as	$key=>$value	)	//	Fill the Parameters array with entries from 
 			$aParameters[	$key]=$value	;	//	the request XML element's attrbites.
 
-
 print "\n".__CLASS__."::".__FUNCTION__."() XML node name ='{$oNodeRequest->nodeName}' ";
-
 
 	switch(strtolower($oNodeRequest->nodeName))			//	This is a hook for adding future custom processing
 		{						//	of request nodes by means other than Asterisk itself.
@@ -475,18 +489,20 @@ print "\n".__CLASS__."::".__FUNCTION__."() XML node name ='{$oNodeRequest->nodeN
 			if(isset(	$this->aLoginList[$szUsername]		)		&&
 					$this->aLoginList[$szUsername]["secret"]==$szSecret	)	$user->bAuthenticated	= TRUE;
 
-			$oNodeResult					=new node(Array("nodeName"	=>"Event"));$oNodeResult->setAttribute("name","login");
-			$oNodeResult->appendChild(			 new node(Array("nodeName"	=>"result",
-										"nodeValue"	=>(($user->bAuthenticated == TRUE)?"accepted":"rejected"))	));
-
+			$oNodeResult					=new node(Array("nodeName"	=>"Event"	));$oNodeResult->setAttribute("name","login");
+			$oNodeResult->appendChild(			 new node(Array("nodeName"	=>"result	",
+											"nodeValue"	=>(($user->bAuthenticated === TRUE)?"accepted":"rejected"))	));
 			$user->QSend($oNodeResult->renderXML(),WSF_text)						;break;
-	case	"logoff"	:	dPrint("\nCUSTOM AsterLogoff	Packet");
-		$user->bAuthenticated = FALSE;
+	case	"logoff"	:		dPrint("\nCUSTOM AsterLogoff	Packet");
 
-		break;
+			$oNodeResult					=new node(Array("nodeName"	=>"Event"	));$oNodeResult->setAttribute("name","logout");
+			$oNodeResult->appendChild(			 new node(Array("nodeName"	=>"result"	,
+											"nodeValue"	=>"GoodBye"	)));
+
+			$user->QSend($oNodeResult->renderXML(),WSF_close)						;break;
 	case	"reload"	:	dPrint("\nCUSTOM AsterReload	Packet");break;
 	default :
-		if(		$user->bAuthenticated = FALSE)
+		if(		$user->bAuthenticated === FALSE)
 				{
 				$oNodeResult=new node(Array(	"nodeName"	=>	"Event"));
 				$oNodeResult->setAttribute(	"name"		,	"login");
@@ -500,71 +516,10 @@ print "\n".__CLASS__."::".__FUNCTION__."() XML node name ='{$oNodeRequest->nodeN
 				AMIaction($oNodeRequest->nodeName,$aParameters		);
 				}
 		}// end switch
-
 print "\n".__CLASS__."::".__FUNCTION__."() /".__FUNCTION__."() XML node name ='{$oNodeRequest->nodeName}' ";
-
-
 	return;
 	}// end function process
-/*	Function	:	dohandshake()
-**	Parameters	:	(User Class	)	$user
-**				(String		)	$buffer
-**	Returns		:	(Bool		)	Always TRUE
-**	Description	:	This bit of stuff is supposed to take an ordinary
-**				HTTP connection and upgrade it to a WebSocket connection.
-**				
-*/
-function dohandshake(&$user,&$buffer)
-	{
-	$user->Qclear()									;	//	Clear outgoing user message queue.
-	$upgrade		=$user->classHandshake->doHandShake($buffer		);	//	process user's webSocket handshake request
-	socket_write(		 $user->socket,$upgrade,strlen($upgrade)		);	//	Send user the $upgrade response.
-	$user->handshake	=true							;	//	Note the completetion of the handshake.
-	$user->wSocketState	=WebSocket_endpoint::OPEN				;	//	Set connection state to OPEN
-	return true;
-	}// end function dohandshake
 
-/*	Function	:	getusersbymessages()
-**	Parameters	:	None
-**	Returns		:	Array() - An array of user classes.
-**	Description	: An array of user class instances that have pending return messages
-**			in their outgoing queues. 
-*/
-function getusersbymessages()
-	{
-	$aFound						=Array()			;
-	foreach(wSockets::$users as $user	)
-		if(!$user->Qempty())	$aFound[]	=$user				;
-	if(count(			$aFound)	==0		)return NULL	;
-	return				$aFound						;
-	}
-/*	Function	:	getsocketsbypending()
-**	Parameters	:	None
-**	Returns		:	Array() - An array of user classes <OR> NULL if there are none.
-**	Description	: An array of user sockets for user class instances that have
-**			pending return messages in their user queue.
-**			This function is called by the loop
-**			in the wSockets constructor when checking for output destined 
-**			to a connected HTML5 client.
-*/
-function		getsocketsbypending()
-	{
-	$aFound		=Array();
-	foreach(wSockets::$users as	$user)		if(!			$user->Qempty())	$aFound[]=&$user->socket;
-	return (count($aFound)==0)?NULL:$aFound;
-	}
-/*	Function	:	getuserbysocket()
-**	Parameters	:	(Socket		)	$socket
-**	Returns		:	(User		)	Returns the User associated with a socket or NULL;
-**	Description	:	
-*/
-static	function	getuserbysocket($socket){	foreach(wSockets::$users as $user)if($user->socket	==$socket	)return $user;	return NULL	;	}
-/*	Function	:	getuserbyid()
-**	Parameters	:	(String		)	$id
-**	Returns		:	
-**	Description	:	
-*/
-static	function	getuserbyid($id)	{	foreach(wSockets::$users as $user)if($user->id		==$id		)return $user;	return NULL	;	}
 /*	Function	:	getheaders()
 **	Parameters	:	$req
 **	Returns		:	Array() [Request,Host,Origin]
@@ -580,6 +535,7 @@ function getheaders($req)
 	if(preg_match("/Origin: (.*)\r\n/",$req,$match)){ $o=$match[1]; }
 	return array($r,$h,$o);
 	}// end function getheaders
+
 
 
 /*	Function	:	vectorBroadcast()
@@ -600,15 +556,14 @@ function vectorBroadcast(	$szMessage		,
 	case	"_amiauthenticateAccepted"	:dPrint("\nEvent broadcast for (".$oNode->getAttribute("name").") SKIPPED");break;
 	default					:dPrint("\nEvent broadcast for (".$oNode->getAttribute("name").")");
 //DCDCDC
-
-						foreach(wSockets::$users as $user)$user->QSend($szMessage,WSF_text);
+						foreach(User::$users as $user)$user->QSend($szMessage,WSF_text);
 		break;
 		}
 	}
 /*	Function	:	vectorSystemMessage()
 **	Parameters	:	(Array		)	$aMessage
 **	Returns		:	None
-**	Description	:
+**	Description	:	Sorts out AMI results for internal AsterClick system requests
 */
 var $aLoginList		=Array();
 var $aBuildLoginList	=Array();
@@ -637,6 +592,8 @@ function vectorSystemMessage($aMessage)
 						break;
 		}	//	End	Switch
 	}
+
+
 /*	Function	:	vectorQueuedMessages()
 **	Parameters	:	None
 **	Returns		:	None
@@ -651,42 +608,81 @@ function vectorQueuedMessages()
 	$iMessageCount		=$oMSGqueue->msg_count();//	Number of active messages in the queue
 	if($iMessageCount	<1)return		;//	If there are no messages , bail.
 	$lStartTime		=mktime()		;//	Record time we started reading the queue
-	$this->console("\nvectorQueuedMessages has ($iMessageCount) entries",9);
+
+	dPrint(	sprintf	(			"*** wSocket AMI	EVENTS(%d)"	,
+						$iMessageCount						)	,iCare_dPrint_sockets)	;
+
 	if($iMessageCount	>$iMaxTries)		 //	If there are more messages than we want, limit 	
 		$iMessageCount	=$iMaxTries		;//	the number of messages to read.
 							
 	for($iTries=$iMessageCount;$iTries>0;$iTries--)
 		{
 		$aMessage	=$oMSGqueue->msg_receive();
-		if(!is_array($aMessage))	{	$this->console("\nvectorQueuedMessages EMPTY",9);	return;	}
+		if(!is_array($aMessage))
+			{
+			dPrint(	sprintf	(	"*** wSocket AMI	EVENT(EMPTY oMSGqueue)!"	)	,iCare_dPrint_sockets)	;
+			continue;
+			}
 		$szUserID	=$aMessage["__userID"		];
 		$szEvent	=$aMessage["Event"		];
-		$oUser		=$this->getuserbyid($szUserID	);
+		$oUser		=User::getuserbyid($szUserID	);
 
-		$oNode		= new node(Array("nodeName"=>"event"));
-		$oNode->setAttribute("name",strtolower($szEvent));
+		$oNodeEvent		= new node(Array("nodeName"=>"event"));
+		$oNodeEvent->setAttribute("name",strtolower($szEvent));
+
+		dPrint(	sprintf	(		"*** wSocket AMI	EVENT(User(%s) Group(%s))"	,
+						$aMessage["__userID"	]				,
+						$aMessage["__groupID"	]				)	,iCare_dPrint_sockets)	;
 
 		if($aMessage["__groupID"	]=="SYSTEM")
 			{
-			$this->vectorSystemMessage($aMessage);	continue;
+			$this->vectorSystemMessage($aMessage);			continue;
+			}
+		//	Drop	internal associative keys
+		unset($aMessage["__userID"	]);	unset($aMessage["__groupID"	]);	unset($aMessage["Event"		]);
+		$oNodeEvent->loadFromArray($aMessage);
+
+
+		if(	$oUser			!=NULL		&&
+			$oUser-> bAuthenticated	!==TRUE		)
+			{
+
+//				$bAuthenticated
+
+			
+		dPrint(	sprintf	(		"*** wSocket	AMI	EVENT(User(%s) Not Authenticated)! user details...\n%s"	,
+						$oUser->id							,
+						print_r($oUser,TRUE))	,iCare_dPrint_sockets)	;
+			$oNodeEvent->setAttribute("authentication","false");
+			continue;
 			}
 
-		unset($aMessage["__userID"	]);
-		unset($aMessage["__groupID"	]);
-		unset($aMessage["Event"		]);
 
-		$oNode->loadFromArray($aMessage);
-		if(	$oUser			!=NULL		&&
-			$oUser->bAuthenticated	!==TRUE		)
-			{		$oNode->setAttribute("authentication","false");continue;}
-		$szXML		=	$oNode->renderXML();
+		$szXML		=	$oNodeEvent->renderXML();
 
-		if($oUser			!=NULL		)	$oUser->QSend($szXML);
-		else							$this->vectorBroadcast($szXML,$oNode);
+		if($oUser			!=NULL		)
+			{
+
+		dPrint(	sprintf	(		"*** wSocket	AMI	EVENT(send to %s)\n%s"	,
+						$oUser->id					,
+						$szXML						)	,iCare_dPrint_sockets)	;
+			$oUser->QSend(		$szXML		);
+			}else{
+
+		dPrint(	sprintf	(		"*** wSocket	AMI	EVENT(send to %s)\n%s"	,
+						"BROADCAST"					,
+						$szXML						)	,iCare_dPrint_sockets)	;
+			$this->vectorBroadcast(	$szXML,$oNodeEvent	);
+			}
 		}// end for;
 	$lNowTime		=mktime()		;
 	$lDifTime		=$lNowTime-$lStartTime	;
-	$this->console("\nVectorQueuedMessages StartTime=".$lStartTime." Now=".$lNowTime." Diff=".$lDifTime,9);
+/*
+	dPrint(	sprintf	(			"*** wSocket vectorQueued() Start=%d Now=%d timed=%d",
+						$lStartTime								,
+						$lNowTime								,
+						$lDifTime							)	,iCare_dPrint_sockets)	;
+*/
 	return;
 	}// end function
 /*	Function	:	getPIDfilename()
@@ -794,9 +790,9 @@ EOL;
 
 	socket_listen(		$this->master,20				)                                or die("socket_listen() failed");
 
-	echo "Server Started : ".date('Y-m-d H:i:s')	."\n"				;
-	echo "Master socket  : ".$this->master		."\n"				;
-	echo "Listening on   : ".$address		." port ".$port."\n\n"		;
+	dPrint("*** wSocket	socket_listen()	STARTED	".date('Y-m-d H:i:s')				,iCare_dPrint_always);
+	dPrint("*** wSocket	socket_listen()	".sprintf('HOST	%s'."\t".' PORT %d',$address,$port)	,iCare_dPrint_always);
+	dPrint("*** wSocket	socket_listen()	SOCKET	".$this->master					,iCare_dPrint_always);
 
 	$this->sockets = array($this->master);
 	return $this->master;
@@ -828,7 +824,7 @@ function ASTaction($aParameters)
 			$value->setAttribute("value",$oUser->attrs[$value->attributes["name"]]);
 			dPrint("\nGetAttribute ".$value->attributes["name"]);
 			break;
-		case "chatsend"		://wSockets::$users
+		case "chatsend"		://User::$users
 			$szFromLabel	=$oUser->id;
 			$szFrom		=$oUser->id;
 			if(isset($oUser->attrs["Ext"	]))$szFrom	=$oUser->attrs["Ext"	];
@@ -848,8 +844,7 @@ function ASTaction($aParameters)
 											"time"=>date("H:i:s") )	));
 			
 			dPrint("chatsendOut ".$oXMLchat->renderXML(),9);
-
-			foreach(wSockets::$users as $key=>$uvalue)		$uvalue->Qsend($oXMLchat->renderXML());				
+			foreach(User::$users as $key=>$uvalue)		$uvalue->Qsend($oXMLchat->renderXML());				
 			break;
 		default:
 			dPrint("Child(".$value->nodeName.")");
@@ -857,19 +852,7 @@ function ASTaction($aParameters)
 		$oUser->Qsend($oXMLout->renderXML());
 		}// end
 	}// End Func
-/*	Function	:	say()
-**	Parameters	:	(String		)	$msg=""
-**	Returns		:	(None		)
-**	Description	:	
-*/
-function	say($msg="")	{	dPrint($msg);	}
 
-/*	Function	:	console()
-**	Parameters	:	(String		)	$msg=""
-**	Returns		:	
-**	Description	:	
-*/
-function console($msg="")	{	if($this->debug){dPrint($msg);}		}
 /*	Function	:	server_main()
 **	Parameters	:	(Int		)	$argc
 **				(Array		)	$argv
@@ -912,8 +895,8 @@ function server_main($argc,$argv)
 					$bGiveHelp=TRUE;
 		}	//	End	Switch
 
-
-	$this->console(		$this->server_banner())	;
+	dPrint(	sprintf	(	"\n*** wSocket	BANNER\n%s",
+				$this->server_banner()				)	,iCare_dPrint_sockets)	;
 
 	if($bGiveHelp	)	$this->server_help()	;
 	if($bStop	)	$this->server_stop()	;
@@ -927,7 +910,7 @@ function server_main($argc,$argv)
 */
 function server_setup()
 	{
-	$this->console("::server_Setup ",9);
+	dPrint(	sprintf	(	"\n*** wSocket	SERVER SETUP"	)	,iCare_dPrint_sockets)	;
 	}
 /*	Function	:	server_start()
 **	Parameters	:	None
@@ -942,15 +925,21 @@ function server_start()
 	$this->szPIDstart	=$this->isrunning()		;	//	Get PID (Process Id) or FALSE;
 	$this->server_setup()					;
 	$pid		= pcntl_fork()				;
-	if	($pid	== -1)	{	$this->console("\n::start_server fork failure!\n");	exit();}	//	fork failure
+	if	($pid	== -1)	{
+
+	dPrint(	sprintf	(	"\n*** wSocket	SERVER	pcntl_fork() FAILS"	)	,iCare_dPrint_sockets)	;
+	exit();
+
+
+	}	//	fork failure
 	elseif	($pid)		{								exit();}	//	close the parent
 	else			{										//	child becomes our daemon
-				$this->console("\n::server_start Starting..."			);
+				dPrint(	sprintf	(	"\n*** wSocket	SERVER	Starting"	)		,iCare_dPrint_sockets)	;
 				posix_setsid(							);		//	Make the current process a session leader
 				chdir('/'							);	
 				umask(0								);		//	ajust the PHP user mask
 				$newpid			=posix_getpid()				;		//	Note the current process Id
-				$this->console("\n::server_start Running with pid $newpid \n"	);
+				dPrint(	sprintf	(	"\n*** wSocket	SERVER	RUNNING PID(%d)",$newpid)	,iCare_dPrint_sockets)	;
 				file_put_contents(	$this->szPIDfilepath,$newpid, LOCK_EX	);		//	Store the PID in our lock file.
 				$this->server_loop(	$this->host, $this->port		);		//	Begin main WebSocket server loop
 				return $newpid;
@@ -966,7 +955,7 @@ function server_stop()
 	{
 	if((	$this->szPIDstart	=	$this->isrunning())!==FALSE)			//	Get Current orocess Id or FALSE
 		{
-		$this->console("\n::server_stop Stopping Run For $this->szPIDstart ...");
+		dPrint(	sprintf	(	"\n*** wSocket	SERVER	Ending run for %s ",$this->szPIDstart)	,iCare_dPrint_sockets)	;
 		if(is_resource(	$this->sock)	&&	$this->sock)
 				{
 				fflush(			$this->sock)			;
@@ -977,7 +966,10 @@ function server_stop()
 			sleep(2)							;
 		}
 	if(file_exists($this->szPIDfilepath))unlink(	$this->szPIDfilepath)		;	//	Delete the PID lock file.
-	$this->console("\n::server_stop Stopped\n")					;	//	That's all folks!!
+
+
+
+	dPrint(	sprintf	(	"\n*** wSocket	SERVER	Stopped")	,iCare_dPrint_sockets)	;//	That's all folks!!
 	}
 /*	Function	:	server_banner()
 **	Parameters	:	None

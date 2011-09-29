@@ -687,11 +687,13 @@ class	WebSocket_frame_pong		extends WebSocket_frame
 
 class	WebSocket_endpoint
 	{
-public	$URL		=""	;
 const	CLOSED		=3	;
 const	CLOSING		=2	;
 const	OPEN		=1	;
 const	CONNECTING	=0	;
+
+
+public	$URL		=""	;
 public	$bufferedAmount	=0	;
 public	$readyState	=WebSocket_endpoint::CONNECTING;
 public	$protocol	=""	;

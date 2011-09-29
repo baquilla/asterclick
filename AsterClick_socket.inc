@@ -176,20 +176,26 @@ function AMIsocket_create()
 				SO_REUSEADDR	,
 				1		)	===FALSE)
 		{
-		die(__FILE__.":".__LINE__."socket_set_opton() failed\n");
+
+		dPrint(sprintf(	"*** AMIsocket	socket_set_option()	FAILED(%s)!"	,
+				socket_strerror(socket_last_error($sock))		),iCare_dPrint_always);
+		die(__FILE__.":".__LINE__);
+
 		}
 	// socket_set_nonblock($sock) or die("socket_set_nonblock() failed");
-	dPrint(__FILE__.":".__LINE__," Connect Socket on port (".$iAMIport.")",1);
+//	dPrint(__FILE__.":".__LINE__," Connect Socket on port (".$iAMIport.")",1);
 	usleep(200000);
-//	if(FALSE===socket_connect($sock,"127.0.0.1",$iAMIport))
 	if(FALSE===@socket_connect($sock,$szAMIhost,$iAMIport))
 		{
-		dPrint((__FILE__.":".__LINE__.
-			"\n-- AMIsocket_loop()::socket_connect($szAMIhost,$iAMIport) failed (".
-			socket_strerror(socket_last_error($sock)).")"),iCare_dPrint_always);
+		dPrint(sprintf(	"*** AMIsocket	socket_connect(%s:%d)	FAILED(%s)!"	,
+				$szAMIhost,$iAMIport					,
+				socket_strerror(socket_last_error($sock))		),iCare_dPrint_always);
+
+
 		exit();
 		}else{
-		dPrint(" AMIsocket_loop()::socket_connect($szAMIhost,$iAMIport) OK",iCare_dPrint_always);
+		dPrint(sprintf(	"*** AMIsocket	socket_connect(%s:%d)	OK."	,
+				$szAMIhost,$iAMIport					),iCare_dPrint_always);
 		}
 	socket_set_nonblock($sock);
 	}
@@ -245,7 +251,11 @@ function AMIsocket_loop()
 	//***
 	//*** main AMI read/write loop
 	//*** 
-	echo "\nAMI Loop begins\n";
+
+	dPrint(			"\n*** AMISocket	LOOP	BEGINS "		,iCare_dPrint_always)	;
+
+
+
 	$oPid->setPIDfilename();
 
 
@@ -263,7 +273,8 @@ function AMIsocket_loop()
 
 		}// /while TRUE
 	$oSHM->bWebSocketLoop	=0;
-	echo "\nAMI Loop Ends\n";	
+	dPrint(			"\n*** AMISocket	LOOP	ENDS "		,iCare_dPrint_always)	;
+//	echo "\nAMI Loop Ends\n";	
 	}
 
 
@@ -284,18 +295,18 @@ function wSocketLoop()
 	{
 	global $oSHM			;
 	usleep(100000)			;
-	dPrint("wSocketLoop() START"	,iCare_dPrint_always);
+	dPrint("*** wSocket	LOOP	STARTING"	,iCare_dPrint_always);
 	$oPid		=new pid();
 	$iTriesStart	=50;
 	while(	($iTriesStart--) >0				&&
 		file_exists($oPid->getPIDfilename())===FALSE	&&
 		$oSHM->bWebSocketLoop!=1			)
 		{
-		dPrint("wSocketLoop() Waiting for AMI server to stablize (".$iTriesStart.")",iCare_dPrint_always);
+		dPrint(sprintf("*** wSocket	LOOP	WAITING".'(%d) 	for AMIsocket',$iTriesStart),iCare_dPrint_always);
 		usleep(100000);
 		}
 	$oWsockets = new wSockets();
-	dPrint("/wSocketLoop()",iCare_dPrint_always);
+	dPrint("*** wSocket		LOOP	ENDS"		,iCare_dPrint_always);
 	}
 /*	Function	:	startAMIsocket_loop()
 **	Parameters	:	None

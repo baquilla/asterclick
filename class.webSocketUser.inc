@@ -1,8 +1,11 @@
 <?php
 /*	File		:	class.wSocketUsers.inc
 **	Author		:	Dr. Clue
-**	Description	:
+**	Description	:	
 */
+
+
+require_once("class.circularBuffer.inc"		);	//	A circular Ring buffer class.
 
 /**
 ***
@@ -11,6 +14,10 @@
 **/
 class User
 	{
+	static	$users		=	Array()		;	//	Array of user Objects.
+
+
+
   	var	$id			=-1				;	//	Session unique identifier.
 
 	var	$socket			=NULL				;	//	This would be the socket a user connects with.
@@ -46,10 +53,97 @@ class User
 */
 function	User($aArgs=Array())
 	{
+	array_push(User::$users	,$this			);	//	Add (this) new user to list.
 	$this->szOutput_encoding			=iconv_get_encoding("output_encoding")	;
 	foreach($aArgs as $key=>$value)$this->$key	=$value					;
 	$this->Qclear()										;
 	}
+
+
+
+/*	Function	:	dohandshake()
+**	Parameters	:	(User Class	)	$user
+**				(String		)	$buffer
+**	Returns		:	(Bool		)	Always TRUE
+**	Description	:	This bit of stuff is supposed to take an ordinary
+**				HTTP connection and upgrade it to a WebSocket connection.
+**				
+*/
+function dohandshake(&$buffer)
+	{
+	$this->Qclear()						;	//	Clear the user's pending message queue
+	$this->handshake	=false				;	//	Indicate the user needs to handshake
+	$this->classHandshake	=new WebSocketHandshake_08()	;	//	Assign a WebSocket handshake class instance
+	$this->classFraming	=new WebSocket_codec_frame()	;	//	Assign a WebSocket message framing instance.
+//	$this->Qclear()									;	//	Clear outgoing user message queue.
+	$upgrade		=$this->classHandshake->doHandShake($buffer		);	//	process user's webSocket handshake request
+	socket_write(		 $this->socket,$upgrade,strlen($upgrade)		);	//	Send user the $upgrade response.
+
+	if($this->classHandshake->iResultCode!=101)
+		{
+		return false;
+		}
+	$this->handshake	=true							;	//	Note the completetion of the handshake.
+	$this->wSocketState	=WebSocket_endpoint::OPEN				;	//	Set connection state to OPEN
+	return true;
+	}// end function dohandshake
+
+
+
+
+/*	Function	:	getuserbyid()
+**	Parameters	:	(String		)	$id
+**	Returns		:	
+**	Description	:	
+*/
+static	function	getuserbyid($id)	{
+	foreach(User::$users as $user)if($user->id		==$id		)return $user;	return NULL	;
+	}
+
+/*	Function	:	getuserbysocket()
+**	Parameters	:	(Socket		)	$socket
+**	Returns		:	(User		)	Returns the User associated with a socket or NULL;
+**	Description	:	
+*/
+static	function	getuserbysocket($socket)
+	{
+	foreach(User::$users as $user)
+		if($user->socket	==$socket	)
+			return $user;	return NULL	;
+	}
+
+/*	Function	:	getsocketsbypending()
+**	Parameters	:	None
+**	Returns		:	Array() - An array of user classes <OR> NULL if there are none.
+**	Description	: An array of user sockets for user class instances that have
+**			pending return messages in their user queue.
+**			This function is called by the loop
+**			in the wSockets constructor when checking for output destined 
+**			to a connected HTML5 client.
+*/
+static	function		getsocketsbypending()
+	{
+	$aFound		=Array();
+	foreach(User::$users as	$user	)	if(!			$user->Qempty())	$aFound[]=&$user->socket;
+	return (count($aFound)==0)?NULL:$aFound;
+	}
+
+/*	Function	:	getusersbymessages()
+**	Parameters	:	None
+**	Returns		:	Array() - An array of user classes.
+**	Description	: An array of user class instances that have pending return messages
+**			in their outgoing queues. 
+*/
+/*static	function		getusersbymessages()
+	{
+	$aFound		=Array();
+	foreach(User::$users as $user	)	if(!$user->Qempty())	$aFound[]	=$user				;
+	if(count(			$aFound)	==0		)return NULL	;
+	return				$aFound						;
+	}
+*/
+
+
 /*	Function	:	wrap()
 **	Parameters	:	(Array		)	$oParams
 **					(Boolean	)	"FIN"		[TRUE	]	Is this the final frame in this message.

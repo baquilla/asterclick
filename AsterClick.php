@@ -88,9 +88,9 @@ set_time_limit(		0	);	// We don't want a time limit.
 ob_implicit_flush(		);	// Clear the output buffer.
 
 
-
-
-
+//	Recording starting TTY state.
+$bIsTTYconnection	=posix_isatty(	STDOUT)		;
+$szTTYname		=posix_ttyname(	STDOUT)||NULL	;
 
 
 //***
@@ -120,7 +120,7 @@ $lEndTime		=$lStartTime		;	// used in performance testing
 							// processAMIresponse() functions.
 
 
-$szAsterClickVersion	="0.0.0.0.D.R14"	;	// YY.MM.DD.([D]ev|[A]lpha|[B]eta|[P]rod).[R]elease# Where # is a sequential number.
+$szAsterClickVersion	="0.0.0.0.D.R15"	;	// YY.MM.DD.([D]ev|[A]lpha|[B]eta|[P]rod).[R]elease# Where # is a sequential number.
 
 $szArgv			=""			;	// Place to put argv[1] command
 if(isset($argv[1]))$szArgv=$argv[1]		;	// If argv[1] exists record it.
@@ -229,7 +229,7 @@ function AMImessageRemove()
 function ACMIaction($szAction,$aParams=Array(),$bStack=TRUE)
 	{
 
-	print "\nSAW ACMI_xxxxx\n".print_r($aParams,TRUE);
+	dPrint("*** ACMIaction ".print_r($aParams,TRUE),iCare_dPrint_AMIaction);
 
 	}
 /*	Function	:	AMIaction()
@@ -677,7 +677,8 @@ $oSHM->kill();
 // in AsterClick_socket.inc.
 
 $oForkCommandLine	= new fork(Array(	"szfChild"	=>"startAMIsocket_loop"));
-dPrint("End run AsterClick.php\r\n\r\n\r\n",iCare_dPrint_always);
+dPrint("*** AsterCLick		END Run",iCare_dPrint_always);
+print "\n\n";
 /******
 *******
 ******* MAIN LEAD IN FROM THE COMMAND LINE

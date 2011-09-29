@@ -13,10 +13,16 @@
 **	http://www.voip-info.org/wiki/view/asterisk+manager+events
 */
 
+
+
+
 $aASTERCLICKusers	=Array();
 $aASTERCLICKlogins	=Array();
-
-
+/*	Function	:	processAsterClickResponse()
+**	Parameters	:	(Array		)	$aResponse	-
+**	Returns		:
+**	Description	:
+*/
 function	processAsterClickResponse($aResponse)
 	{
 	if($aResponse["__userID"]=="AMIaction"	)return;
@@ -58,7 +64,7 @@ function	processAsterClickResponse($aResponse)
 
 
 			break;
-		case "ConfigListComplete"	:
+		case "ConfigListComplete"			:
 			if(!isset($GLOBALS["aASTERCLICKusers"])){break;}
 
 			foreach($aASTERCLICKusers as $key=>$value)
@@ -90,8 +96,6 @@ function	processAsterClickResponse($aResponse)
 			print "\n SAW GROUP ASTERCLICK \n".print_r($aResponse,TRUE)."\n";
 		}//end switch
 	}
-
-
 /*	Function	:	vectorEventPrint()
 **	Parameters	:	(String)	$szMessage	The text message to print.
 **				(Bool)		$bPrint		Indicates if the message should actually be printed.
@@ -130,39 +134,39 @@ function vectorEventPrint($szMessage,$bPrint)
 function vectorEventSend($aResponse)
 	{
 	global $oMSGqueue;	// System V message queue class.
-	if(!isset($aResponse["ActionID"]))
-		$aResponse["ActionID"]	=mktime()."_0_ALL_ALL";
-		$aActionID		=explode("_",$aResponse["ActionID"]);
-		for($x=0;$x<4;$x++)if(!isset($aActionID[$x]))$aActionID[$x]="";
+	if(!isset(	$aResponse["ActionID"]))
+			$aResponse["ActionID"]	=mktime()."_0_ALL_ALL";
+	$aActionID		=explode("_",$aResponse["ActionID"]);
+	for($x=0;$x<4;$x++)if(!isset($aActionID[$x]))$aActionID[$x]="";
 		$aActionIDmap=Array(	"timestamp"	=>$aActionID[0]		,
 					"sequence"	=>$aActionID[1]		,
 					"groupID"	=>$aActionID[2]		,
 					"userID"	=>$aActionID[3]		,
 					"response"	=>$aResponse		);
-		$aResponse["__userID"	]=$aActionID[3];
-		$aResponse["__groupID"	]=$aActionID[2];
+	$aResponse["__userID"	]=$aActionID[3];
+	$aResponse["__groupID"	]=$aActionID[2];
 
-		foreach($aResponse as $key =>$value)
-			{
-			$aResponse[$key]=trim($value);
-			}
+	foreach($aResponse as $key =>$value)
+		{
+		$aResponse[$key]=trim($value);
+		}
 
-		switch($aResponse["__groupID"	])
-			{
-		case 	"SYSTEM"	:
-			processAsterClickResponse($aResponse);
-			dPrint("SYSTEM EVENT:".print_r($aResponse,TRUE),iCare_dPrint_SYSTEMevent);
-			break;
-		case	"FastAMI"	:
-		case	"ALL"		:
+	switch($aResponse["__groupID"	])
+		{
+	case 	"SYSTEM"	:
+		processAsterClickResponse($aResponse);
+		dPrint("SYSTEM EVENT:".print_r($aResponse,TRUE),iCare_dPrint_SYSTEMevent);
+		break;
+	case	"FastAMI"	:
+	case	"ALL"		:
 //	print "\n SAW GROUP ALL"	;
-		case	"HTML5"		:	
+	case	"HTML5"		:	
 //	print "\n SAW GROUP HTML5"	;
 		$oMSGqueue->msg_send(Array("message"=>$aResponse));
 		break;
-		default			:
-			print "\n SAW UNKNOWN GROUP ".$aResponse["__groupID"	]	;break;
-			}// End Switch
+	default			:
+		print "\n SAW UNKNOWN GROUP ".$aResponse["__groupID"	]	;break;
+		}// End Switch
 	$aStatus	=$oMSGqueue->msg_stat_queue()	;
 	$iQueued	=$aStatus["msg_qnum"]		;
 	$iPauseUnit	=95				;
@@ -248,12 +252,12 @@ function vectorEvent($aResponse)
 			if(isset($aStackBreadCrumbs[$szACTION_ID]))
 					{
 					$szCategory="_None_";
-					if(isset($aStackBreadCrumbs[$szACTION_ID]["category"]))
+					if(isset($aStackBreadCrumbs[$szACTION_ID]["category"]	))
 						$szCategory=$aStackBreadCrumbs[$szACTION_ID]["category"];
 
 					$szFilename				="";
-					if(isset($aStackBreadCrumbs[$szACTION_ID]))
-					if(isset($aStackBreadCrumbs[$szACTION_ID]["filename"]))
+					if(isset($aStackBreadCrumbs[$szACTION_ID]		))
+					if(isset($aStackBreadCrumbs[$szACTION_ID]["filename"]	))
 						$szFilename=$aStackBreadCrumbs[$szACTION_ID]["filename"];
 
 					$aStart=Array(		"Event"		=>"ConfigListStarts"	,
@@ -326,7 +330,6 @@ function vectorEvent($aResponse)
 
 		case "Dial"			:break;
 		case "OriginateResponse"	:break;
-
 
 		case "Newexten"			:break;
 		case "VoicemailUserEntry"	:break;
@@ -432,8 +435,11 @@ break;
 	vectorEventSend(	$aResponse			);	// send the event to the browser System V message queue.
 	}// end function
 
-
-
+/*	Function	:	
+**	Parameters	:	
+**	Returns		:
+**	Description	:
+*/
 function dynamicDialplanEntries()
 	{
 //	AMIaction("Login",Array(	"Username"	=>$szAMIusername,

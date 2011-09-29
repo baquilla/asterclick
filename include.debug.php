@@ -20,8 +20,6 @@ function	trace_call()
 						}
 				);	//	End	array_walk()
 		}			//	End	Function
-
-
 	//	Indicates if the caller is running standalone (TRUE) or is included (FALSE)
 function	is_standalone()
 		{

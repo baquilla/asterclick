@@ -20,6 +20,9 @@ define ("iCare_dPrint_Signal"			,4260,TRUE)	;	// Signal Handler
 define ("iCare_dPrint_CLIparse" 		,4300,TRUE)	;	// CLI parsing related message
 
 
+
+
+
 /*	Function	:	dPrint()
 **	Parameters	:	(String|mixed	)	$oMessage		Message to display.
 **				(Number		)	$iPriority	[1]	Message pririty , or Message Id.
@@ -28,9 +31,14 @@ define ("iCare_dPrint_CLIparse" 		,4300,TRUE)	;	// CLI parsing related message
 **			can be easily vectored or suppressed.
 */
 $iCare_dPrint	=10		;	//	Sets a minimum priority for messages not otherwise configured.
+
+
+
 function	dPrint($oMessage,$iPriority=1)
 	{
-	global $iCare_dPrint;
+	global $iCare_dPrint,$bIsTTYconnection,$iCare_dPrint_last;
+	if(!$bIsTTYconnection)return;
+
 	
 	switch($iPriority)
 		{
@@ -39,13 +47,13 @@ function	dPrint($oMessage,$iPriority=1)
 	case	iCare_dPrint_sockets			:break	;
 	case	iCare_dPrint_socketsAMI			:return	;
 	case	iCare_dPrint_parse			:return	;//break;
-	case	iCare_dPrint_AMIaction			:break	;//return;
+	case	iCare_dPrint_AMIaction			:return	;//return;
 	case	iCare_dPrint_AMIevent			:return	;//return;
 	case	iCare_dPrint_SYSTEMevent		:return	;//return;
 	case	iCare_dPrint_webSockets			:break	;//return;
 	case	iCare_dPrint_webSockets_handshake	:return	;
 	case	iCare_dPrint_webSockets_frame		:break	;
-	case	iCare_dPrint_Signal			:break	;
+	case	iCare_dPrint_Signal			:return		;
 	default	:
 		if($iPriority<$iCare_dPrint)		return	;
 		}//	End Switch($iPriority)
@@ -53,10 +61,34 @@ function	dPrint($oMessage,$iPriority=1)
 	if(empty(			$oMessage)		)return TRUE;
 
 
-	printf("\n%s",($iPriority!=iCare_dPrint_always)?("[".getDefineName($iPriority)."]"):"");
+$bIsTTYconnection	=posix_isatty(	STDOUT)		;
 
+if($iCare_dPrint_last!=$iCare_dPrint)	printf("\n%s",($iPriority!=iCare_dPrint_always)?("[".getDefineName($iPriority)."]\n"):"");
+
+printf("\nAsterClick>");
+$iCare_dPrint_last=$iCare_dPrint;
 	print $oMessage;
 	return TRUE;
 
 	}
+
+/**
+***	This function should not really be in this file , but I needed a place to put it for the moment.
+**/
+
+/*	Function	:	array_remove_object()
+**	Parameters	:	(Array		)		&$aArray
+**				(Object		)		&$oObject
+**	Returns		:	None
+**	Description	:	Removes the oObject from the array if present.
+**
+*/
+function array_remove_object(&$aArray,&$oObject)
+	{
+	if(!is_null($oObject)&&($indexObject	= array_search(		$oObject,	$aArray	))	>=0	)
+		array_splice(	$aArray,$indexObject,1);
+	}
+
+
+
 ?>
