@@ -130,46 +130,54 @@ if(isset($argv[1]))$szArgv=$argv[1]		;	// If argv[1] exists record it.
 
 
 
-require_once("include.dPrint.php");
-
-
-
-
+require_once("Assets/PHP/include.dPrint.php");
 
 //***
 //*** Load configuration
 //***
-if(file_exists("configure.php"))
+if(file_exists("./Assets/PHP/configure.php"))
 	{
-	require_once("configure.php");
-	if(isset($MySql_szUser)){require_once("class.mysql.inc");}
+	require_once("./Assets/PHP/configure.php");
+	if(isset($MySql_szUser)){require_once("./Assets/PHP/class.inc/class.mysql.inc");}
 	}
 
 
 //***
 //*** Load supporting classes
 //***
-require_once("class.shm.inc"		);	// Shared Memory class for named shared memory objects
-require_once("class.msg_queues.inc"	);	// Class for working with System V message ques.
+require_once("./Assets/PHP/include.socket.defines.php"		);	//	Standard socket constants
+
+require_once("./Assets/PHP/inc/AsterClick_signal.inc"		);	//	Signal Handling
+
+require_once("./Assets/PHP/include.socket.defines.php"		);
+
+require_once("./Assets/PHP/include.debug.php"			);
 
 
-require_once("class.ini.inc"		);	// reads ini file values.
-require_once("class.pid.inc"		);	// process ID file manager class
-require_once("class.fork.inc"		);	// Process forking class
-require_once("class.wSockets.inc"	);	// Socket communications for HTML5.
-require_once("class.phone.inc"		);	// Phone/Channel member abstraction class.
+require_once("./Assets/PHP/class.inc/class.shm.inc"		);	// Shared Memory class for named shared memory objects
+require_once("./Assets/PHP/class.inc/class.msg_queues.inc"	);	// Class for working with System V message ques.
 
-require_once("class.cliParser.inc"	);	// Attempts to parse CLI command results
-						// into meaningfull Arrays.
+require_once("./Assets/PHP/class.inc/class.ini.inc"		);	// reads ini file values.
+require_once("./Assets/PHP/class.inc/class.pid.inc"		);	// process ID file manager class
+require_once("./Assets/PHP/class.inc/class.fork.inc"		);	// Process forking class
+require_once("./Assets/PHP/class.inc/class.wSockets.inc"	);	// Socket communications for HTML5.
+require_once("./Assets/PHP/class.inc/class.phone.inc"		);	// Phone/Channel member abstraction class.
 
-require_once("AsterClick_argv.inc"	);	// Handles situtations related
-						// Commandline startup and related arguments.
-require_once("AsterClick_socket.inc"	);	// Functions handling socket interactions
-						// with Asterisk AMI.
-require_once("AsterClick_signal.inc"	);	// Functions handling signal handlers
+require_once("./Assets/PHP/class.inc/class.cliParser.inc"	);	// Attempts to parse CLI command results
+									// into meaningfull Arrays.
 
-require_once("caseEvent.php"		);	// Used to vector AMI events by name as well
-						// as some pseudo AsterClick events.
+require_once("./Assets/PHP/inc/AsterClick_argv.inc"		);	// Handles situtations related
+									// Commandline startup and related arguments.
+
+
+
+
+require_once("./Assets/PHP/inc/AsterClick_socket.inc"		);	// Functions handling socket interactions
+									// with Asterisk AMI.
+//require_once("AsterClick_signal.inc"				);	// Functions handling signal handlers
+
+require_once("./Assets/PHP/caseEvent.php"			);	// Used to vector AMI events by name as well
+									// as some pseudo AsterClick events.
 
 $oINIagents	=	new CLASSini(Array("FILE"=>"../agents.conf"));
 
